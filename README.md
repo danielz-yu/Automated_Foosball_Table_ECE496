@@ -1,2 +1,2 @@
-# automated_foosball_table_ECE496
+# Automated Foosball Table | ECE496 Capstone Project | UofT Engineering 
 Automated Foosball Table
