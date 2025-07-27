@@ -1,10 +1,11 @@
 import cv2
+from math import sin, cos, atan
 from multiprocessing import Pool, Queue
 import numpy as np
 import time
 
-lower_orange = np.array([1, 140, 0])
-upper_orange = np.array([7, 170, 255])
+lower_orange = np.array([9 / 2, 255 * .50, 0])
+upper_orange = np.array([19 / 2, 255 * .84, 255])
 
 def init_pool(d_b):
     global detection_buffer
@@ -49,10 +50,11 @@ def show():
                 multiply_xy += (p[0] - avg_x) * (p[1] - avg_y)
                 square_x += (p[0] - avg_x) ** 2
             if square_x != 0:
+                angle = atan(multiply_xy / square_x)
                 if pos[0] > avg_x:
-                    cv2.line(frame, pos, (pos[0] + 100, pos[1] + 100 * (multiply_xy // square_x)), (0, 0, 255), 2)
+                    cv2.line(frame, pos, (pos[0] + int(100 * cos(angle)), pos[1] + int(100 * sin(angle))), (0, 0, 255), 2)
                 else:
-                    cv2.line(frame, pos, (pos[0] - 100, pos[1] - 100 * (multiply_xy // square_x)), (0, 0, 255), 2)
+                    cv2.line(frame, pos, (pos[0] - int(100 * cos(angle)), pos[1] - int(100 * sin(angle))), (0, 0, 255), 2)
             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
             id += 1
