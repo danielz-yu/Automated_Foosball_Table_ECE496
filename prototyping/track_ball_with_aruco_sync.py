@@ -11,8 +11,11 @@ from multiprocessing import Pool, Queue
 lower_orange = np.array([9 / 2, 255 * .50, 0])
 upper_orange = np.array([19 / 2, 255 * .84, 255])
 
-lower_pink = np.array([340 / 2, 255 * .05, 0])
-upper_pink = np.array([380 / 2, 255 * .4, 255])
+# lower_pink = np.array([340 / 2, 255 * .05, 0])
+# upper_pink = np.array([380 / 2, 255 * .4, 255])
+partition_1 = 35.71
+partition_2 = 64.29
+gap = 28.57
 
 # --------------------
 # ArUco setup
@@ -36,6 +39,72 @@ def detect_object(frame):
     detection_buffer.put(frame)
 
 history = collections.deque(maxlen=5)
+
+def clip_line_to_frame(x1, y1, x2, y2):
+    dx = x2 - x1
+    dy = y2 - y1
+    points = []
+
+    # Avoid division by zero
+    if abs(dx) > 1e-6:
+        # left edge (x=0)
+        t = -x1 / dx
+        y = y1 + t*dy
+        if 0 <= y <= H-1:
+            points.append((0, int(round(y))))
+        # right edge (x=W-1)
+        t = (W-1 - x1) / dx
+        y = y1 + t*dy
+        if 0 <= y <= H-1:
+            points.append((W-1, int(round(y))))
+
+    if abs(dy) > 1e-6:
+        # top edge (y=0)
+        t = -y1 / dy
+        x = x1 + t*dx
+        if 0 <= x <= W-1:
+            points.append((int(round(x)), 0))
+        # bottom edge (y=H-1)
+        t = (H-1 - y1) / dy
+        x = x1 + t*dx
+        if 0 <= x <= W-1:
+            points.append((int(round(x)), H-1))
+
+    # We expect 2 valid intersections
+    if len(points) >= 2:
+        return points[0], points[1]
+    else:
+        return None, None
+
+import numpy as np
+
+def percent_along_line(rod_pt1, rod_pt2, intersection):
+    p1 = np.array(rod_pt1, dtype=float)
+    p2 = np.array(rod_pt2, dtype=float)
+    pi = np.array(intersection, dtype=float)
+
+    rod_vec = p2 - p1
+    inter_vec = pi - p1
+
+    rod_len = np.linalg.norm(rod_vec)
+    if rod_len < 1e-6:
+        return 0.0  # degenerate case
+    
+    # projection of inter_vec onto rod_vec
+    t = np.dot(inter_vec, rod_vec) / (rod_len**2)
+
+    # percentage along the rod
+    return t * 100.0
+
+def point_on_line(rod_pt1, rod_pt2, percent):
+    """
+    rod_pt1, rod_pt2: (x,y) endpoints of rod line (clipped to frame)
+    percent: float in [0,100], percentage along rod_pt1→rod_pt2
+    """
+    p1 = np.array(rod_pt1, dtype=float)
+    p2 = np.array(rod_pt2, dtype=float)
+    t = percent / 100.0
+    return tuple((p1 + t*(p2 - p1)).astype(int))
 
 
 def reflect_trajectory(pos, vel, max_bounces=5, line_slope=None, line_intercept=None):
@@ -135,7 +204,7 @@ def reflect_trajectory(pos, vel, max_bounces=5, line_slope=None, line_intercept=
     return None, trajectory_points
 
 
-def show():
+def show(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s):
     while True:
         frame = detection_buffer.get()
         if frame is None:
@@ -215,40 +284,19 @@ def show():
 
         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
-        mask = cv2.inRange(hsv, lower_pink, upper_pink)
-        mask = cv2.erode(mask, None, iterations=2)
-        mask = cv2.dilate(mask, None, iterations=2)
-
-        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
-        max_area_1 = 0
-        max_area_2 = 0
-        x, y, w, h = 0, 0, 0, 0
-        x2, y2, w2, h2 = 0, 0, 0, 0
-        for cnt in contours:
-            area = cv2.contourArea(cnt)
-            if area > max_area_1:
-                max_area_2 = max_area_1
-                max_area_1 = area
-                x2, y2, w2, h2 = x, y, w, h
-                x, y, w, h = cv2.boundingRect(cnt)
-            elif area > max_area_2:
-                max_area_2 = area
-                x2, y2, w2, h2 = cv2.boundingRect(cnt)
-        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-        cv2.rectangle(frame, (x2, y2), (x2+w2, y2+h2), (0, 255, 0), 2)
-        x_line, y_line, x_line_2, y_line_2 = x + w // 2, y + h // 2, x2 + w2 // 2, y2 + h2 // 2
-        if x_line_2 != x_line:
-            slope = (y_line_2 - y_line) / (x_line_2 - x_line)
-            intercept = int(y_line - slope * x_line)
-            cv2.line(frame, (0, intercept), (W, int(intercept + slope * W)), (0, 0, 255), 2)
+        for i in range(len(rod_slopes)):
+            rod_slope = rod_slopes[i]
+            rod_intercept = rod_intercepts[i]
+            rod_pt1 = rod_pt1s[i]
+            rod_pt2 = rod_pt2s[i]
+            cv2.line(frame, (0, int(rod_intercept)), (W, int(rod_intercept + rod_slope * W)), (0, 0, 255), 2)
         
             if speed > 2.0:
                 intersection, traj_pts = reflect_trajectory(
                     pos, (dx_dt, dy_dt),
                     max_bounces=5,
-                    line_slope=slope,
-                    line_intercept=intercept
+                    line_slope=rod_slope,
+                    line_intercept=rod_intercept
                 )
 
                 # Draw the trajectory polyline
@@ -261,6 +309,24 @@ def show():
                 if intersection:
                     cv2.circle(frame, (int(intersection[0]), int(intersection[1])),
                             6, (0,255,255), -1)
+                    percentage = percent_along_line(rod_pt1, rod_pt2, intersection)
+                    # For reference purposes, we will draw the point of the three players which will be at the desired point
+                    pt1, pt2, pt3 = (0,0), (0,0), (0,0)
+                    if percentage < partition_1:
+                        pt1 = point_on_line(rod_pt1, rod_pt2, percentage)
+                        pt2 = point_on_line(rod_pt1, rod_pt2, percentage + gap)
+                        pt3 = point_on_line(rod_pt1, rod_pt2, percentage + 2 * gap)
+                    elif percentage < partition_2:
+                        pt1 = point_on_line(rod_pt1, rod_pt2, percentage - gap)
+                        pt2 = point_on_line(rod_pt1, rod_pt2, percentage)
+                        pt3 = point_on_line(rod_pt1, rod_pt2, percentage + gap)
+                    else:
+                        pt1 = point_on_line(rod_pt1, rod_pt2, percentage - 2 * gap)
+                        pt2 = point_on_line(rod_pt1, rod_pt2, percentage - gap)
+                        pt3 = point_on_line(rod_pt1, rod_pt2, percentage)
+                    cv2.circle(frame, pt1, 5, (255, 255, 255), -1)
+                    cv2.circle(frame, pt2, 5, (255, 255, 255), -1)
+                    cv2.circle(frame, pt3, 5, (255, 255, 255), -1)
         cv2.imshow("Warped + Ball Tracking", frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -288,6 +354,8 @@ if __name__ == "__main__":
     # Find centers of detected markers
     id_to_center = {}
     for id, c in zip(ids, corners):
+        if id[0] > 3:
+            continue
         pts = c[0]
         center = np.mean(pts, axis=0)
         id_to_center[id[0]] = center
@@ -308,13 +376,37 @@ if __name__ == "__main__":
     ], dtype="float32")
 
     H_matrix, _ = cv2.findHomography(src_pts, dst_pts)
+    
+    rod_slopes, rod_intercepts = [], []
+    rod_pt1s, rod_pt2s = [], []
+    
+    rod_ids = [11, 10]
+    rod_centers = {}
+
+    for id, c in zip(ids, corners):
+        if id[0] in rod_ids:
+            rod_centers[id[0]] = np.mean(c[0], axis=0)  # original frame coords
+
+    if len(rod_centers) == 2:
+        # Convert both to warped coords
+        pts = np.array([rod_centers[11], rod_centers[10]], dtype="float32").reshape(-1,1,2)
+        pts_warped = cv2.perspectiveTransform(pts, H_matrix)
+
+        (x1,y1), (x2,y2) = pts_warped[:,0,:]
+
+        rod_slopes.append((y2 - y1) / (x2 - x1))
+        rod_intercepts.append(y1 - rod_slopes[-1] * x1)
+        rod_pt1, rod_pt2 = clip_line_to_frame(x1, y1, x2, y2)
+        rod_pt1s.append(rod_pt1)
+        rod_pt2s.append(rod_pt2)
+    print(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s)
 
     # --------------------
     # Multiprocessing loop
     # --------------------
     detection_buffer = Queue()
     pool = Pool(5, initializer=init_pool, initargs=(detection_buffer,))
-    show_future = pool.apply_async(show)
+    show_future = pool.apply_async(show, args=(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s))
     futures = []
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind to beginning
