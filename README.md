@@ -1,2 +1,2 @@
-# Automated Foosball Table | ECE496 Capstone Project | UofT Engineering 
-Automated Foosball Table
+# Vision-Guided Automated Foosball Opponent | ECE496 Capstone Project | UofT Engineering 
+Vision-Guided Automated Foosball Opponent
