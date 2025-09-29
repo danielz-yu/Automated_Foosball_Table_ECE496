@@ -1,4 +1,5 @@
 import collections
+import math
 import cv2
 import numpy as np
 import time
@@ -27,6 +28,9 @@ W, H = 800, 600             # warped output size
 aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict_type)
 aruco_params = cv2.aruco.DetectorParameters()
 detector = cv2.aruco.ArucoDetector(aruco_dict, aruco_params)
+
+KICK_THRESHOLD = 7
+LENGTH_THRESHOLD = 0
 
 # --------------------
 # Multiprocessing setup
@@ -290,43 +294,51 @@ def show(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s):
             rod_pt1 = rod_pt1s[i]
             rod_pt2 = rod_pt2s[i]
             cv2.line(frame, (0, int(rod_intercept)), (W, int(rod_intercept + rod_slope * W)), (0, 0, 255), 2)
-        
-            if speed > 2.0:
-                intersection, traj_pts = reflect_trajectory(
-                    pos, (dx_dt, dy_dt),
-                    max_bounces=5,
-                    line_slope=rod_slope,
-                    line_intercept=rod_intercept
-                )
 
-                # Draw the trajectory polyline
-                for i in range(len(traj_pts)-1):
-                    cv2.line(frame, (int(traj_pts[i][0]), int(traj_pts[i][1])),
-                                (int(traj_pts[i+1][0]), int(traj_pts[i+1][1])),
-                                (255,0,0), 1)
+            intersection, traj_pts = reflect_trajectory(
+                pos, (dx_dt, dy_dt),
+                max_bounces=5,
+                line_slope=rod_slope,
+                line_intercept=rod_intercept
+            )
 
-                # Draw intersection if found
-                if intersection:
-                    cv2.circle(frame, (int(intersection[0]), int(intersection[1])),
-                            6, (0,255,255), -1)
-                    percentage = percent_along_line(rod_pt1, rod_pt2, intersection)
-                    # For reference purposes, we will draw the point of the three players which will be at the desired point
-                    pt1, pt2, pt3 = (0,0), (0,0), (0,0)
-                    if percentage < partition_1:
-                        pt1 = point_on_line(rod_pt1, rod_pt2, percentage)
-                        pt2 = point_on_line(rod_pt1, rod_pt2, percentage + gap)
-                        pt3 = point_on_line(rod_pt1, rod_pt2, percentage + 2 * gap)
-                    elif percentage < partition_2:
-                        pt1 = point_on_line(rod_pt1, rod_pt2, percentage - gap)
-                        pt2 = point_on_line(rod_pt1, rod_pt2, percentage)
-                        pt3 = point_on_line(rod_pt1, rod_pt2, percentage + gap)
-                    else:
-                        pt1 = point_on_line(rod_pt1, rod_pt2, percentage - 2 * gap)
-                        pt2 = point_on_line(rod_pt1, rod_pt2, percentage - gap)
-                        pt3 = point_on_line(rod_pt1, rod_pt2, percentage)
-                    cv2.circle(frame, pt1, 5, (255, 255, 255), -1)
-                    cv2.circle(frame, pt2, 5, (255, 255, 255), -1)
-                    cv2.circle(frame, pt3, 5, (255, 255, 255), -1)
+            # Draw the trajectory polyline
+            # lengths_sum = 0
+            for i in range(len(traj_pts)-1):
+                cv2.line(frame, (int(traj_pts[i][0]), int(traj_pts[i][1])),
+                            (int(traj_pts[i+1][0]), int(traj_pts[i+1][1])),
+                            (255,0,0), 1)
+            if len(traj_pts) == 2:
+                lengths_sum = math.sqrt((int(traj_pts[0][0]) - int(traj_pts[1][0])) ** 2 + (int(traj_pts[0][1]) - int(traj_pts[1][1])) ** 2)
+                if speed:
+                    timed = lengths_sum / speed
+            
+                    # Detect when to kick and simulate; this will be replaced by a kick signal in the future (but only once for the first trigger into threshold)
+                    if (timed < 0 and timed > -KICK_THRESHOLD) or (timed > 0 and timed < KICK_THRESHOLD):
+                        cv2.line(frame, (0, int(rod_intercept)), (W, int(rod_intercept + rod_slope * W)), (0, 255, 255), 5)
+
+            # Draw intersection if found
+            if intersection:
+                cv2.circle(frame, (int(intersection[0]), int(intersection[1])),
+                        6, (0,255,255), -1)
+                percentage = percent_along_line(rod_pt1, rod_pt2, intersection)
+                # For reference purposes, we will draw the point of the three players which will be at the desired point
+                pt1, pt2, pt3 = (0,0), (0,0), (0,0)
+                if percentage < partition_1:
+                    pt1 = point_on_line(rod_pt1, rod_pt2, percentage)
+                    pt2 = point_on_line(rod_pt1, rod_pt2, percentage + gap)
+                    pt3 = point_on_line(rod_pt1, rod_pt2, percentage + 2 * gap)
+                elif percentage < partition_2:
+                    pt1 = point_on_line(rod_pt1, rod_pt2, percentage - gap)
+                    pt2 = point_on_line(rod_pt1, rod_pt2, percentage)
+                    pt3 = point_on_line(rod_pt1, rod_pt2, percentage + gap)
+                else:
+                    pt1 = point_on_line(rod_pt1, rod_pt2, percentage - 2 * gap)
+                    pt2 = point_on_line(rod_pt1, rod_pt2, percentage - gap)
+                    pt3 = point_on_line(rod_pt1, rod_pt2, percentage)
+                cv2.circle(frame, pt1, 5, (255, 255, 255), -1)
+                cv2.circle(frame, pt2, 5, (255, 255, 255), -1)
+                cv2.circle(frame, pt3, 5, (255, 255, 255), -1)
         cv2.imshow("Warped + Ball Tracking", frame)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
