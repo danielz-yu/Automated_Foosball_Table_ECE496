@@ -33,7 +33,11 @@ def receive(ser):
 						availability[0] = True
 					elif decoded_response == 'bd':
 						availability[1] = True
-				print(f"Received: {decoded_response}")
+					elif decoded_response == 'cd':
+						availability[2] = True
+					elif decoded_response == 'dd':
+						availability[3] = True
+				# print(f"Received: {decoded_response}")
 		except serial.SerialException as e:
 			print(f"Error: Could not open serial port {SERIAL_PORT}. Is it plugged in?")
 			print(f"Details: {e}")
@@ -59,16 +63,19 @@ colors_high = [np.array([10 / 2, 255 * .95, 255]), np.array([180, 255 * .95, 255
 # location_end = [25, 125, 325, 525]
 # num_foosmen = [1, 2, 5, 3]
 # avg_pos = [-100, -100, -100, -100]
-location_start = [0, 100]
-location_end = [25, 125]
+location_start = [0, 110]
+location_end = [25, 130]
 num_foosmen = [1, 2]
 avg_pos = [-100, -100]
 
 # First rod: 1 foosman, limited in movement unlike other rods 68 21
 # min_first = 30.88
 # max_first = 69.12
-min_first = 40
-max_first = 58
+min_first = 38
+max_first = 62
+
+min_second = 35
+max_second = 65
 
 # Second rod: 2 foosmen
 # Third rod: 5 foosmen
@@ -76,7 +83,7 @@ max_first = 58
 # partitions = [(100.0), (50.0, 100.0), (20.0, 40.0, 60.0, 80.0, 100.0), (33.333, 66.667, 100.0)]
 # gaps = [100.0, 50.0, 20.0, 33.333]
 partitions = [(100.0), (50.0, 100.0)]
-gaps = [100.0, 50.0]
+gaps = [100.0, 48.0]
 
 # --------------------
 # ArUco setup
@@ -231,7 +238,7 @@ def reflect_trajectory(pos, vel, max_bounces=2, line_slope=None, line_intercept=
         # --- Before we reflect, check if this segment hits the target line ---
 
         if line_slope is not None and vx < 0:
-            for i in range(len(line_slope) - 2, -1, -1):
+            for i in range(len(line_slope) - 1, -1, -1):
                 # Solve for t where parametric segment hits y = m*x + b:
                 # y + vy*t = m*(x + vx*t) + b
                 # t * (vy - m*vx) = m*x + b - y
@@ -264,6 +271,8 @@ def reflect_trajectory(pos, vel, max_bounces=2, line_slope=None, line_intercept=
 def show(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s, ser):
 	global availability
 	x, y, w, h = -100, -100, -100, -100
+	last_d = 0
+	last_b = 0
 	while True:
 		frame = detection_buffer.get()[10:-20, 30:-20]
 		if frame is None:
@@ -367,13 +376,22 @@ def show(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s, ser):
 
 			# 4. Loop through the selected top contours and draw
 			avg_pos_this_row = 0
+			if i == 1:
+				y_list = []
 			for cnt in target_contours:
 				x1, y1, w1, h1 = cv2.boundingRect(cnt)
+				if i == 1:
+					y_list.append(y1)
 				avg_pos_this_row += (y1 + h1 // 2)
 				#cv2.rectangle(frame, 
-					  #(x1 + location_start[i], y1), 
-					  #(x1 + location_start[i] + w1, y1 + h1), 
-					  #(0, 255, 0), 2)
+					#(x1 + location_start[i], y1), 
+					#(x1 + location_start[i] + w1, y1 + h1), 
+					#(0, 255, 0), 2)
+			if i == 1 and len(y_list) == 2:
+				if abs(y_list[0] - y_list[1]) < 200:
+					continue
+			elif i == 1:
+				continue
 			avg_pos_this_row //= num_foosmen[i]
 			if avg_pos_this_row:
 				avg_pos[i] = avg_pos_this_row
@@ -381,70 +399,118 @@ def show(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s, ser):
 		kicked = -1
 		intersection = None
 		if speed >= 3.0:
-			intersection, traj_pts = reflect_trajectory(
+			intersection_0, traj_pts_0 = reflect_trajectory(
 				pos, (dx_dt, dy_dt),
 				max_bounces=5,
-				line_slope=rod_slopes,
-				line_intercept=rod_intercepts
+				line_slope=rod_slopes[0:1],
+				line_intercept=rod_intercepts[0:1]
 			)
-			# Draw the trajectory polyline
-			# lengths_sum = 0
-			#for i in range(len(traj_pts)-1):
-				#cv2.line(frame, (int(traj_pts[i][0]), int(traj_pts[i][1])),
-							#(int(traj_pts[i+1][0]), int(traj_pts[i+1][1])),
-							#(255,0,0), 1)
-
-			# Draw intersection if found
-			if intersection:
-				i = intersection[2]				
-				if len(traj_pts) == 2:
-					lengths_sum = math.sqrt((int(traj_pts[0][0]) - int(traj_pts[1][0])) ** 2 + (int(traj_pts[0][1]) - int(traj_pts[1][1])) ** 2)
-					if speed:
-						timed = lengths_sum / speed
-				
-						# Detect when to kick and simulate; this will be replaced by a kick signal in the future (but only once for the first trigger into threshold)
-						if (timed < 0 and timed > -KICK_THRESHOLD) or (timed > 0 and timed < KICK_THRESHOLD):
-							#cv2.line(frame, (0, int(rod_intercepts[i])), (W, int(rod_intercepts[i] + rod_slopes[i] * W)), (0, 255, 255), 5)
-							kicked = i
-				#cv2.circle(frame, (int(intersection[0]), int(intersection[1])),
-						#6, (0,255,255), -1)
-		if x > W / 2 and intersection:
-			percentage = percent_along_line(rod_pt1s[i], rod_pt2s[i], intersection[:2])
+			intersection_1, traj_pts_1 = reflect_trajectory(
+				pos, (dx_dt, dy_dt),
+				max_bounces=5,
+				line_slope=rod_slopes[1:2],
+				line_intercept=rod_intercepts[1:2]
+			)
+		if dx_dt < -0.5 and (rod_pt1s[1][0] - x) / dx_dt >= 0 and (rod_pt1s[1][0] - x) / dx_dt < KICK_THRESHOLD:
+			kicked = 1
+		elif dx_dt < -0.5 and (rod_pt1s[0][0] - x) / dx_dt >= 0 and (rod_pt1s[0][0] - x) / dx_dt < KICK_THRESHOLD:
+			kicked = 0
 		else:
-			percentage = int((y + dy_dt / 40) / H * 100)
+			kicked = -1
+		if intersection_1 is not None:
+			percentage_1 = percent_along_line(rod_pt1s[1], rod_pt2s[1], intersection_1[:2])
+		else:
+			percentage_1 = int((y + dy_dt / 40) / H * 100)
+		if intersection_0 is not None:
+			percentage_0 = percent_along_line(rod_pt1s[0], rod_pt2s[0], intersection_0[:2])
+		else:
+			percentage_0 = int((y + dy_dt / 40) / H * 100)
 
-		if i == 0: # Special case: first rod
-			move_dist = 0
-			if percentage < min_first:
-				#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], min_first), 5, (255, 255, 255), -1)
-				move_dist = 67 * (avg_pos[0] / H - min_first / 100)
-				print(avg_pos[0], move_dist)
-			elif percentage > max_first:
-				#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], max_first), 5, (255, 255, 255), -1)
-				move_dist = 67 * (avg_pos[0] / H - max_first / 100)
-				print(avg_pos[0], move_dist)
+		# if i == 0: # Special case: first rod
+		move_dist = 0
+		if percentage_0 < min_first:
+			#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], min_first), 5, (255, 255, 255), -1)
+			move_dist = 67 * (avg_pos[0] / H - min_first / 100)
+			# print(avg_pos[0], move_dist)
+		elif percentage_0 > max_first:
+			#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], max_first), 5, (255, 255, 255), -1)
+			move_dist = 67 * (avg_pos[0] / H - max_first / 100)
+			# print(avg_pos[0], move_dist)
+		else:
+			#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], percentage), 5, (255, 255, 255), -1)
+			# move_dist = 67 * (avg_pos[0] - intersection[1]) // H
+			move_dist = 67 * (avg_pos[0] / H - percentage_0 / 100)
+			# print(avg_pos[0], move_dist)
+		# if availability[1]:
+		next_b = time.time()
+		if next_b - last_b > 0.05:
+			last_b = next_b
+			availability[1] = False
+			if move_dist >= 0:
+				kick(ser, f'b1{int(move_dist):02d}')
+				pass
 			else:
-				#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], percentage), 5, (255, 255, 255), -1)
-				# move_dist = 67 * (avg_pos[0] - intersection[1]) // H
-				move_dist = 67 * (avg_pos[0] / H - percentage / 100)
-				print(avg_pos[0], move_dist)
-			if availability[1]:
-				# availability[1] = False
-				print(time.time())
-				if move_dist >= 0:
-					kick(ser, f'b1{int(move_dist):02d}')
-				else:
-					kick(ser, f'b0{int(-move_dist):02d}')
-		else:
-			partitions_this_rod = partitions[i]
-			for j in range(len(partitions_this_rod)):
-				if percentage < partitions_this_rod[j]:
-					gap_this_rod = gaps[i]
-					percentage -= gap_this_rod * j
-					for _ in range(len(partitions_this_rod)):
-						#cv2.circle(frame, point_on_line(rod_pt1s[i], rod_pt2s[i], percentage), 5, (255, 255, 255), -1)
-						percentage += gap_this_rod
-					break
+				kick(ser, f'b0{int(-move_dist):02d}')
+				pass
+
+		current_midpoint_pct = (avg_pos[1] / H) * 100.0
+		ball_target_pct = percentage_1 
+
+		# 1. Calculate where the men are relative to the rod's center
+		gap_this_rod = gaps[1]
+		num_men = len(partitions[1])
+		start_offset = - (num_men - 1) * gap_this_rod / 2.0
+		man_offsets = [start_offset + m * gap_this_rod for m in range(num_men)]
+
+		best_target_midpoint = current_midpoint_pct # Fallback
+		min_ball_error = float('inf')
+		min_travel_distance = float('inf')
+		clamp_status = "Normal"
+
+		# 2. Evaluate every man to see who can legally hit the ball
+		for offset in man_offsets:
+			required_midpoint = ball_target_pct - offset
+			
+			# Apply the safeguard limits so the rod never slams the wall
+			if required_midpoint < min_second:
+				clamped_midpoint = min_second
+				current_clamp = f"Clamped MIN"
+			elif required_midpoint > max_second:
+				clamped_midpoint = max_second
+				current_clamp = f"Clamped MAX"
+			else:
+				clamped_midpoint = required_midpoint
+				current_clamp = "Normal"
+				
+			# Where does this specific man actually end up after the safeguard?
+			actual_man_pos = clamped_midpoint + offset
+			
+			# How close does this man get to the ball?
+			ball_error = abs(actual_man_pos - ball_target_pct)
+			travel_distance = abs(clamped_midpoint - current_midpoint_pct)
+			
+			# 3. Pick the man that gets closest to the ball! 
+			# (If tied, pick the one that requires less rod movement)
+			if ball_error < min_ball_error or (ball_error == min_ball_error and travel_distance < min_travel_distance):
+				min_ball_error = ball_error
+				min_travel_distance = travel_distance
+				best_target_midpoint = clamped_midpoint
+				clamp_status = current_clamp
+
+		# 4. Calculate the final movement using the safest, most accurate midpoint
+		move_dist = 67 * (current_midpoint_pct / 100.0 - best_target_midpoint / 100.0)
+		print(f"{clamp_status}: Pos {current_midpoint_pct:.1f} vs {best_target_midpoint:.1f}, Move {move_dist:.2f}cm")
+
+		# Send the command via serial (with your deadband)
+		next_d = time.time()
+		if next_d - last_d > 0.1 and int(abs(move_dist)) > 0:
+			# availability[3] = False
+			last_d = next_d
+			if move_dist >= 0:
+				kick(ser, f'd0{int(move_dist):02d}')
+			else:
+				kick(ser, f'd1{int(-move_dist):02d}')
+
 		if kicked == -1:
 			for i in range(len(partitions)):
 				dist_to_rod = abs(rod_pt1s[i][0] - (x + w // 2))
@@ -456,16 +522,21 @@ def show(rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s, ser):
 			case 0 if availability[0]:
 				availability[0] = False
 				kick(ser, 'a')
+			case 1 if availability[2]:
+				availability[0] = False
+				kick(ser, 'a')
+				availability[2] = False
+				kick(ser, 'c')
 				
-		cv2.imshow("Warped + Ball Tracking", frame)
+		#cv2.imshow("Warped + Ball Tracking", frame)
 
 		if cv2.waitKey(1) & 0xFF == ord('q'):
 			break
 	return
 
 def init(fps):
-    # Can confirm using this printout to see whether GStreamer support is enabled on the version of OpenCV used
-    print(cv2.getBuildInformation())
+    # Can confirm using this # printout to see whether GStreamer support is enabled on the version of OpenCV used
+    # print(cv2.getBuildInformation())
 
     # Define pipeline based on OV9782 specs
     pipeline = (
@@ -497,7 +568,7 @@ def get_rod_lines(id_to_center, H_matrix):
         rod_pt1s.append(rod_pt1)
         rod_pt2s.append(rod_pt2)
     # Debug output
-    print(f"Slopes: {rod_slopes}\nIntercepts:{rod_intercepts}\nPoint 1s:{rod_pt1s}\nPoint 2s:{rod_pt2s}")
+    # print(f"Slopes: {rod_slopes}\nIntercepts:{rod_intercepts}\nPoint 1s:{rod_pt1s}\nPoint 2s:{rod_pt2s}")
     return rod_slopes, rod_intercepts, rod_pt1s, rod_pt2s
 
 
@@ -527,7 +598,7 @@ if __name__ == "__main__":
     
     ser = init_control()
     if not ser:
-        print("Failed to set up serial connection.")
+        # print("Failed to set up serial connection.")
         exit(0)
     # --------------------
     # Multiprocessing loop
