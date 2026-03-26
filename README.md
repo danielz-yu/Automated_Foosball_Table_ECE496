@@ -21,6 +21,12 @@ An autonomous foosball opponent system that combines real-time computer vision, 
 🗓️ **Timeline:** Sept. 2025 - Mar. 2026
 
 <div align="center">
+    <img src="team_assets/design_fair_poster.png" alt="Design Fair Poster" style="height:auto; width:auto;">
+</div>
+
+<br>
+
+<div align="center">
     <img src="team_assets/Full_Automated_Foosball_Opponent_Setup_2026-Jan-21.gif" alt="Full Automated Foosball Table Gif (Jan. 2026)" style="height:auto; width:auto;">
 </div>
 
