@@ -14,7 +14,7 @@ An autonomous foosball opponent system that combines real-time computer vision, 
 
 ✅ **Status:** Completed!
 <br>
-🎯 **Target Demo:** Late March 2026
+🎯 **Target Demo:** March 25-28, 2026
 <br>
 💵 **Budget:** [~$2.5k](https://github.com/danielz-yu/Automated_Foosball_Table_ECE496/blob/main/deliverables/Budget%20Estimate%20%7C%20Team%202025162.pdf)
 <br>
