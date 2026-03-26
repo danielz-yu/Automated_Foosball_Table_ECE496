@@ -12,11 +12,11 @@ An autonomous foosball opponent system that combines real-time computer vision, 
 - Sub-200ms Reaction Time: Faster than average human reaction time of 250ms
 - Non-Permanent Installation: Removable attachment system that preserves original table
 
-✅ **Status:** In Development
+✅ **Status:** Completed!
 <br>
-🎯 **Target Demo:** Late March 2026
+🎯 **Target Demo:** March 25-28, 2026
 <br>
-💵 **Budget:** [~$2.5k (and 📈)](https://github.com/danielz-yu/Automated_Foosball_Table_ECE496/blob/main/deliverables/Budget%20Estimate%20%7C%20Team%202025162.pdf)
+💵 **Budget:** [~$2.5k](https://github.com/danielz-yu/Automated_Foosball_Table_ECE496/blob/main/deliverables/Budget%20Estimate%20%7C%20Team%202025162.pdf)
 <br>
 🗓️ **Timeline:** Sept. 2025 - Mar. 2026
 
@@ -28,7 +28,7 @@ An autonomous foosball opponent system that combines real-time computer vision, 
 - Develop defensive gameplay capable of defending for 1+ minute against untrained players
 - Achieve ball control at speeds up to 1 m/s
 - Demonstrate practical integration of ECE concepts: computer vision, embedded systems, control theory, and mechatronics
-- Create reproducible design for future educational use
+- Create a reproducible design for future educational use
 
 ## 🏗️ System Architecture
 **Vision System:**
@@ -70,9 +70,11 @@ An autonomous foosball opponent system that combines real-time computer vision, 
 This project is developed as part of ECE496 at the University of Toronto. The design is open-source for educational purposes.
 
 ## 🙏 Acknowledgments
-- Professor Adve & Professor Phang
-- Electrical & Computer Engineering Department, University of Toronto
-- Robotics for Space Exploration, University of Toronto
+- Professor Adve, Professor Phang, Professor Prodić
+- The Edward S. Rogers Sr. Department of Electrical & Computer Engineering, University of Toronto
+- Robotics for Space Exploration Design Team
+- ECE Club
+- Canada Foosball
 
 #
 <div align="center">
